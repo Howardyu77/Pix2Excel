@@ -1,0 +1,13 @@
+Pillow
+pix2tex
+opencv-python-headless
+latex2sympy2
+torch 
+torchvision 
+torchaudio
+xlsxwriter
+pysimplegui
+matplotlib
+xlwings
+pywin32
+comtypes
