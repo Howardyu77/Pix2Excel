@@ -1,4 +1,4 @@
-1. Make sure you have python installed locally/
+1. Make sure you have python installed locally.
 2. Type cmd in the address bar of that window and hit return (that will launch the terminal already set to this current directory).
 3. copy and paste the belowed expression into the cmd window.
 	pip install -r requirements.txt
