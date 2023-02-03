@@ -12,3 +12,4 @@ xlwings
 pywin32
 comtypes
 numpy
+sympy
