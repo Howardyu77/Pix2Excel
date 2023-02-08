@@ -11,29 +11,39 @@ import xlsxwriter
 import re
 import matplotlib.pyplot as plt
 from IPython.display import display, Math
-from pix2tex import cli as pix2tex
 from PIL import Image
 import sys 
-sys.path.append("C:\\Python310\Lib\site-packages")
-
+from pix2tex import cli as pix2tex
 model = pix2tex.LatexOCR()
+#sys.path.append("C:\\Python310\Lib\site-packages")
 
 
-def simplify_latex(tex_str):
-    # tex_str = tex_str.replace(" ","*")
-    matches = re.findall(r"\\mathrm{(.*?)}", tex_str)
+
+def remove_tex_sym_format(tex_str, format):
+    #this function identify and remove speical latex fonts symtax 
+    # print(format)
+    pattern = r"\\" + format + r"{(.*?)}"
+    
+    pattern1 = "\\" + format + "{"
+    # print(pattern)
+    # print(pattern1)
+    matches = re.findall(pattern, tex_str)
+    # print(matches)
     matches = set(matches)
 
-    matchesbf = set(re.findall(r"\\mathbf{(.*?)}", tex_str))
-
-    tex_str = tex_str.replace("\\mathrm{", "")
-    tex_str = tex_str.replace("\\mathbf{", "")
-
+    tex_str = tex_str.replace(pattern1, "")
+    # print(tex_str)
     for letter in matches:
         tex_str = tex_str.replace(letter+"}",letter)
+    # print(tex_str)
+    return tex_str
 
-    for letter in matchesbf:
-        tex_str = tex_str.replace(letter+"}",letter)
+def simplify_latex(tex_str):
+    #sometimes latex will have special fonts for maths symbols, remove them to avoid complications.
+    format_to_remove = ['mathbf','mathrm',"mathit",'mathnormal','mathcal','mathscr','mathbb','varmathbb','mathbbm','mathbbmss','mathbbmtt','mathds','mathbbb','mathfrak']
+    
+    for format in format_to_remove:
+        tex_str = remove_tex_sym_format(tex_str, format)
 
     tex_str = tex_str.replace("\\bf", "")
     tex_str = tex_str.replace("\\bigr", "")
@@ -42,6 +52,7 @@ def simplify_latex(tex_str):
     return tex_str
 
 def python2vba(math_str):
+    #convert python equation syntax into excel syntax
     math_str = math_str.replace("**"," ^ ")
     math_str = math_str.replace("sqrt","Sqr")
     math_str = math_str.replace("sin","Sin")
@@ -60,6 +71,7 @@ def replace_speical_vars(tex_str): # the names C, O, S, I, N, E and Q are predef
     return tex_str
 
 def undo_special_vars(tex_str):
+    #after converting a latex equ into python syntax, recover the original charaters
     for letter in ("C", "O", "S", "I", "N", "E","Q"):
         new_letter = "L_" + letter.lower()
         tex_str = tex_str.replace(new_letter,letter)
@@ -71,12 +83,14 @@ def print_latex(tex_str):
 
 
 def pix2latex(path):
+    #OCR the picture into latex
     img = Image.open(path)
     str_formula = model(img)
     str_formula = simplify_latex(str_formula)
     return str_formula
 
 def upload_to_excel(str_UDF):
+    #this function, upload the excel UDFs string into vba, so that the UDFs can be used in excel
     xl = win32.gencache.EnsureDispatch('Excel.Application')
     xl.Visible = True
     ss = xl.ActiveWorkbook
@@ -85,28 +99,34 @@ def upload_to_excel(str_UDF):
     xlmodule.CodeModule.AddFromString(str_UDF)
 
 def latex2excel(str_formula,str_func_name):
-
+    #put everything together and generate a excel UDFs string it takes the following form
+    #Function function_name(args)
+    #   function's operation
+    #End Function
+    
     str_function = "Function "
     str_end_function = "End Function"
-    str_formula = replace_speical_vars(str_formula)
-    sympy_formula = latex2sympy(str_formula)
-    sym = str(tuple(sympy_formula.free_symbols))
+    str_formula = replace_speical_vars(str_formula)#pre-process latex formula strings
+    sympy_formula = latex2sympy(str_formula)#convert latex to python syntax
+    sym = str(tuple(sympy_formula.free_symbols))#.free_symbols returns a list of unique symbols that used in the formula, so that we can use this as UDFs' arguments
 
-    
+    #recover original charaters
     str_formula = undo_special_vars(str_formula)
     sym = undo_special_vars(sym)
 
+    #convert python to excel sytax
     sym = python2vba(sym)
     str_formula = python2vba(str(sympy_formula))
 
+    #complie excel UDFs sytax
     str_UDF = str_function + str_func_name + sym + "\n" + "\t" + str_func_name + "=" + str_formula + "\n" + str_end_function
+    #send to excel
     upload_to_excel(str_UDF)
 
 
-# VARS CONSTS:
 
-# New figure and plot variables so we can manipulate them
-
+############################## Below are codes for user interface######################
+#This UI is to show what is scan into latex and users need to ensure the scan latex is correct, then it can be uploaded to excel
 _VARS = {'window': False,
          'fig_agg': False,
          'pltFig': False}
@@ -126,7 +146,7 @@ def draw_figure(canvas, figure):
 AppFont = 'Any 16'
 sg.theme('DarkTeal12')
 
-
+#this sets the layout
 layout = [[sg.Canvas(key='figCanvas')],
         [sg.Text("Select a photo: ",font=('Helvetica', 13, 'bold'),justification='left',size=(16, 1)),sg.Combo("",size=(50, 1),auto_size_text=True, key='-FILENAME-'),sg.FileBrowse('Browse', target='-FILENAME-')],
            [sg.T("Scan result in latex:",font=('Helvetica', 13, 'bold'),size=(16, 1)),sg.Multiline(size=(50,3), disabled=True, autoscroll=False, key="Output")],
@@ -182,11 +202,14 @@ def updateChart(str_latex):
 # MAIN LOOP
 switch = 0
 while True:
+
+    
     event, values = _VARS['window'].read(timeout=200)
     path = values['-FILENAME-']
+    
     if event == sg.WIN_CLOSED or event == 'Exit':
         break
-    # New Button (check the layout) and event catcher for the plot update
+    
     if event == "Scan photo" and switch==0:
         if len(values['-FILENAME-'])==0:
             sg.popup("Please select a photo first")
@@ -195,22 +218,36 @@ while True:
             drawChart(str_latex)
             _VARS['window']["Output"].print(str_latex)
             switch = 1
+    
     elif event == "Scan photo" and switch==1:
         if len(values['-FILENAME-'])==0:
             sg.popup("Please select a photo first")
         else:
             str_latex = pix2latex(path)
+            _VARS['window']["Output"].print(str_latex)
             updateChart(str_latex)
+    
     elif event == 'Regenerate Latex':
-        if len(values['Input'])!=0 and switch == 0:
-            print(values['Input'])
-            input_str = values['Input'].replace("\r","")
-            drawChart(values['Input'])
-        elif len(values['Input'])==0 and switch != 0:
-            str_latex = pix2latex(path)
-            updateChart(str_latex) 
+        if len(values['Output'])==0:
+            if len(values['-FILENAME-'])==0:
+                sg.popup("Please select a photo first")
+            else:
+                str_latex = pix2latex(path)
+                drawChart(str_latex)
+                _VARS['window']["Output"].print(str_latex)
+                switch = 1
         else:
-            updateChart(values['Input'])
+            if len(values['Input'])!=0 and switch == 0:
+                print(values['Input'])
+                input_str = values['Input'].replace("\r","")
+                drawChart(values['Input'])
+            elif len(values['Input'])==0 and switch != 0:
+                str_latex = pix2latex(path)
+                _VARS['window']["Output"].print(str_latex)
+                updateChart(str_latex) 
+            else:
+                updateChart(values['Input'])
+    
     elif event == 'Upload to Excel':
         if len(values['Functionname']) != 0:
             option = sg.popup_ok_cancel("Are you sure you want to upload this formula to Excel")
